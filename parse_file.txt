@@ -1,0 +1,2 @@
+(S(NP(NP(DT A)(NN boy))(PP(IN with)(NP(DT a)(NN telescope))))(VP(VBD saw)(NP(DT a)(NN girl))))
+0.000658161979834
