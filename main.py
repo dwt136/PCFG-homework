@@ -46,23 +46,22 @@ def count(s, counter, total):
     return parent
 
 
-def write_model_line(parent, child, p, f):
+def make_model_line(parent, child, p):
     if isinstance(child, tuple):
         child = " ".join(child)
-    f.write(parent + ' # ' + child + ' # ' + str(p) + '\n')
+    return parent + ' # ' + child + ' # ' + str(p)
 
 
 def train(training_data, model_file):
     counter = defaultdict(lambda: defaultdict(int))
     total = defaultdict(int)
-    f = open(training_data, 'r')
-    for line in f:
-        if line[-1] == '\n':
-            line = line[:-1]
-        count(line, counter, total)
-    f.close()
+    with open(training_data, 'r') as f:
+        for line in f:
+            if line[-1] == '\n':
+                line = line[:-1]
+            count(line, counter, total)
 
-    f = open(model_file, 'w')
+    output = []
     prob = defaultdict(dict)
     for parent, v in counter.iteritems():
         ftotal = float(total[parent])
@@ -71,8 +70,9 @@ def train(training_data, model_file):
                 continue
             p = n / ftotal
             prob[parent][child] = p
-            write_model_line(parent, child, p, f)
-    f.close()
+            output.append(make_model_line(parent, child, p))
+    with open(model_file, 'w') as f:
+        f.write('\n'.join(sorted(output)))
 
 
 if __name__ == '__main__':
