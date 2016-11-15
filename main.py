@@ -87,6 +87,31 @@ def train(training_data, model_file):
 
     return lex_prob, syn_prob, dic
 
+    
+    
+    
+    
+def calc_outside_node(start, end, mother, mother_type, inside, chart, outside):
+    if start == end:
+        return
+    for node in chart[start][end][mother_type]:
+        left = node[1]
+        right = node[2]
+        d = left[6]
+        left_add = mother * node[4] * inside[d+1][end][right[0]]
+        right_add = mother * node[4] * inside[start][d][left[0]]
+        outside[start][d][left[0]] += left_add
+        outside[d+1][end][right[0]] += right_add
+        calc_outside_node(start, d, left_add, left[0], inside, chart, outside)
+        calc_outside_node(d+1, end, right_add, right[0], inside, chart, outside)
+        
+
+def calc_outside(m, chart, inside):
+    outside = [[defaultdict(float) for x in xrange(m)] for y in xrange(m)]
+    outside[0][m-1]['S'] = 1.0
+    calc_outside_node(0, m-1, 1.0, 'S', inside, chart, outside)
+    return outside
+    
 
 def parse(s, lex_prob, syn_prob, dic):
     """
@@ -95,14 +120,16 @@ def parse(s, lex_prob, syn_prob, dic):
     s = s.split(' ')
     m = len(s)
     chart = [[defaultdict(list) for x in xrange(m)] for y in xrange(m)]
+    inside = [[defaultdict(float) for x in xrange(m)] for y in xrange(m)]
     for j in xrange(m):
         lower_j = s[j].lower()
         for k, p in lex_prob.iteritems():
             parent = k[0]
             child = k[1]
             if lower_j == child:
-                # [parent, left_child, right_child, prob, inside, outside]
-                chart[j][j][parent].append([parent, s[j], None, p, None, None])
+                # (parent, left_child, right_child, prob, prob_a_bc, start, end)
+                chart[j][j][parent].append((parent, s[j], None, p, p, j, j))
+                inside[j][j][parent] = p
                 break
         for i in xrange(j - 1, -1, -1):
             for k in xrange(i, j):
@@ -119,8 +146,23 @@ def parse(s, lex_prob, syn_prob, dic):
                                 p_c = tree_c[3]
                                 p_a = p * p_b * p_c
                                 chart[i][j][a].append(
-                                    [a, tree_b, tree_c, p_a, None, None])
-    return chart[0][m - 1]['S']
+                                    (a, tree_b, tree_c, p_a,p, i, j))
+                                inside[i][j][a] += p * inside[i][k][b] * inside[k+1][j][c]
+    outside = calc_outside(m, chart, inside)
+    
+    inout = [[{} for x in xrange(m)] for y in xrange(m)]
+    for j in xrange(m):
+        for i in xrange(j, -1, -1):
+            for k, v in inside[i][j].iteritems():
+                inout[i][j][k] = (v, outside[i][j][k])
+    
+    results = chart[0][m-1]['S']
+    print results
+    result = None
+    for r in results:
+        if result is None or r[3] > result[3]:
+            result = r
+    return result, inout
 
 
 def make_tree_string(tree):
@@ -131,21 +173,18 @@ def make_tree_string(tree):
     right = make_tree_string(tree[2])
     return '(' + tree[0] + left + right + ')'
 
-
-def inside_outside(results, f):
-    pass
-
-
-def save_parsed_result(results, parse_file):
-    print results
-    most_likely = None
-    for result in results:
-        if most_likely is None or result[3] > most_likely[3]:
-            most_likely = result
+def save_parsed_result(result, inout, parse_file):
     f = open(parse_file, 'w')
-    f.write(make_tree_string(most_likely) + '\n')
-    f.write(str(most_likely[3]) + '\n')
-    inside_outside(results, f)
+    f.write(make_tree_string(result) + '\n')
+    f.write(str(result[3]) + '\n')
+    
+    inout_output = []
+    for j in xrange(len(inout)):
+        for i in xrange(j, -1, -1):
+            for k, v in inout[i][j].iteritems():
+                inout_output.append(' # '.join([str(x) for x in (k, i, j, v[0], v[1])]))
+    
+    f.write('\n'.join(sorted(inout_output)))
     f.close()
 
 
@@ -153,5 +192,5 @@ if __name__ == '__main__':
     lex_prob, syn_prob, dic = train('training_data.txt', 'model_file.txt')
 
     test_str = 'A boy with a telescope saw a girl'
-    res = parse(test_str, lex_prob, syn_prob, dic)
-    save_parsed_result(res, 'parse_file.txt')
+    result, inout = parse(test_str, lex_prob, syn_prob, dic)
+    save_parsed_result(result, inout, 'parse_file.txt')
